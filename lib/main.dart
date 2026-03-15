@@ -24,7 +24,6 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
   List<dynamic> _filtrados = [];
   final TextEditingController _searchController = TextEditingController();
 
-  // Nombres de columnas oficiales
   final List<String> _headersOficiales = [
     'CODIGO interno',
     'Codigo de barras',
@@ -39,6 +38,10 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
   void initState() {
     super.initState();
     _cargarDatosDeMemoria();
+    // Escuchar cambios en el buscador para mostrar/ocultar la X
+    _searchController.addListener(() {
+      setState(() {});
+    });
   }
 
   Future<void> _cargarDatosDeMemoria() async {
@@ -54,7 +57,6 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
     await prefs.setString('lista_precios', json.encode(_productos));
   }
 
-  // REFORMA: Exportación con punto y coma para Argentina
   Future<void> _exportarDatos() async {
     if (_productos.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No hay datos para exportar")));
@@ -65,19 +67,16 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
       for (var p in _productos) {
         csvData += _headersOficiales.map((h) => p[h]?.toString() ?? "").join(";") + "\n";
       }
-
       final Directory directory = await getTemporaryDirectory();
       final String filePath = '${directory.path}/Lista_Precios_Torreon.csv';
       final File file = File(filePath);
       await file.writeAsString(csvData, encoding: utf8);
-      
       await Share.shareXFiles([XFile(filePath)], text: 'Copia de seguridad El Torreón');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error al exportar: $e")));
     }
   }
 
-  // REFORMA: Importación inteligente (7 columnas)
   Future<void> _importarArchivo() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -93,7 +92,6 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
           final decoded = utf8.decode(input, allowMalformed: true);
           List<String> lineas = const LineSplitter().convert(decoded);
           if (lineas.isNotEmpty) {
-            // Detecta si usa coma o punto y coma
             String separador = lineas[0].contains(';') ? ';' : ',';
             for (var i = 1; i < lineas.length; i++) {
               List<String> values = lineas[i].split(separador);
@@ -146,7 +144,6 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
     });
   }
 
-  // REFORMA: Código Interno Automático y 7 campos
   void _mostrarFormularioProducto({Map<String, dynamic>? productoExistente, int? index}) {
     String proximoID = "";
     if (productoExistente == null) {
@@ -179,7 +176,7 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: TextField(
                   controller: controladores[h],
-                  enabled: h != 'CODIGO interno', // El código interno no se toca
+                  enabled: true, // Edición habilitada para corregir lo viejo
                   decoration: InputDecoration(
                     labelText: h, 
                     border: const OutlineInputBorder(),
@@ -250,7 +247,11 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
         child: MobileScanner(
           onDetect: (capture) {
             if (capture.barcodes.isNotEmpty) {
-              controller.text = capture.barcodes.first.rawValue ?? "";
+              final String codigo = capture.barcodes.first.rawValue ?? "";
+              setState(() {
+                controller.text = codigo;
+              });
+              _buscar(codigo); // Búsqueda instantánea
               Navigator.pop(context);
             }
           },
@@ -267,8 +268,8 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
         backgroundColor: const Color(0xFF1F2937),
         foregroundColor: Colors.white,
         actions: [
-          IconButton(icon: const Icon(Icons.share), onPressed: _exportarDatos, tooltip: 'Exportar CSV'),
-          IconButton(icon: const Icon(Icons.file_open), onPressed: _importarArchivo, tooltip: 'Importar Excel/CSV'),
+          IconButton(icon: const Icon(Icons.share), onPressed: _exportarDatos),
+          IconButton(icon: const Icon(Icons.file_open), onPressed: _importarArchivo),
         ],
       ),
       body: Column(
@@ -281,10 +282,19 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
                   child: TextField(
                     controller: _searchController,
                     onChanged: _buscar,
-                    decoration: const InputDecoration(
-                      hintText: 'Buscar por nombre, marca o código...',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchController.text.isNotEmpty 
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              _buscar("");
+                            },
+                          ) 
+                        : null,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ),
@@ -306,8 +316,7 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
                   margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   child: ListTile(
                     title: Text("${p['DESCRIPCION']} - ${p['MARCA']}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text("Int: ${p['CODIGO interno']} | Barras: ${p['Codigo de barras']}\nProv: ${p['PROVEEDOR']}"),
-                    isThreeLine: true,
+                    subtitle: Text("Int: ${p['CODIGO interno']} | Barras: ${p['Codigo de barras']}"),
                     trailing: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.end,
