@@ -38,7 +38,6 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
   void initState() {
     super.initState();
     _cargarDatosDeMemoria();
-    // Escuchar cambios en el buscador para mostrar/ocultar la X
     _searchController.addListener(() {
       setState(() {});
     });
@@ -176,7 +175,7 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: TextField(
                   controller: controladores[h],
-                  enabled: true, // Edición habilitada para corregir lo viejo
+                  enabled: true, 
                   decoration: InputDecoration(
                     labelText: h, 
                     border: const OutlineInputBorder(),
@@ -239,25 +238,18 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
     );
   }
 
-  void _escanearParaFormulario(TextEditingController controller) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SizedBox(
-        height: 350,
-        child: MobileScanner(
-          onDetect: (capture) {
-            if (capture.barcodes.isNotEmpty) {
-              final String codigo = capture.barcodes.first.rawValue ?? "";
-              setState(() {
-                controller.text = codigo;
-              });
-              _buscar(codigo); // Búsqueda instantánea
-              Navigator.pop(context);
-            }
-          },
-        ),
-      ),
+  Future<void> _escanearParaFormulario(TextEditingController controller) async {
+    final String? codigoEscaneado = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const PantallaEscaneo()),
     );
+
+    if (codigoEscaneado != null && codigoEscaneado.isNotEmpty) {
+      setState(() {
+        controller.text = codigoEscaneado;
+      });
+      _buscar(codigoEscaneado);
+    }
   }
 
   @override
@@ -337,6 +329,46 @@ class _ElTorreonAppState extends State<ElTorreonApp> {
         onPressed: () => _mostrarFormularioProducto(),
         backgroundColor: Colors.blue,
         child: const Icon(Icons.add, color: Colors.white),
+      ),
+    );
+  }
+}
+
+class PantallaEscaneo extends StatefulWidget {
+  const PantallaEscaneo({super.key});
+
+  @override
+  State<PantallaEscaneo> createState() => _PantallaEscaneoState();
+}
+
+class _PantallaEscaneoState extends State<PantallaEscaneo> {
+  final MobileScannerController scannerController = MobileScannerController();
+
+  @override
+  void dispose() {
+    scannerController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Escanear Código"),
+        backgroundColor: const Color(0xFF1F2937),
+        foregroundColor: Colors.white,
+      ),
+      body: MobileScanner(
+        controller: scannerController,
+        onDetect: (capture) {
+          if (capture.barcodes.isNotEmpty) {
+            final String? codigo = capture.barcodes.first.rawValue;
+            if (codigo != null && codigo.isNotEmpty) {
+              scannerController.stop(); // Apaga la cámara antes de volver
+              Navigator.pop(context, codigo); // Cierra y devuelve el código
+            }
+          }
+        },
       ),
     );
   }
